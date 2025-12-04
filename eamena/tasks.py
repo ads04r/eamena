@@ -3,6 +3,8 @@ from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from django.conf import settings
+from arches.app.models import models
+from io import StringIO
 from celery import shared_task
 import os, json
 
@@ -73,3 +75,25 @@ def import_processed_bulk_upload_and_notify(notify_address=None, upload_path=Non
 		msg = EmailMultiAlternatives("Bulk upload complete", text_content, settings.EMAIL_FROM_ADDRESS, [notify_address])
 		msg.attach_alternative(html_content, "text/html")
 		msg.send()
+
+@shared_task
+def load_etl_file(userid, files, summary, result, temp_dir, loadid):
+
+	ev = models.LoadEvent.objects.get(loadid=loadid)
+	out = StringIO()
+	import_file = os.path.join(temp_dir, list(files.keys())[0])
+	graph_id = '34cfe98e-c2c0-11ea-9026-02e7594ce0a0'
+	call_command('bu', operation='validate', graph=graph_id, source=import_file, stdout=out)
+	ret = json.loads(out.getvalue())
+
+	print(ret) # Could not open the file: uploadedfiles/tmp/10ef8e33-4ca7-404a-b3f1-07cee6a42923/BUS_Qatar_E51N25-43_Upload.xlsx
+
+	for error_report in ret:
+		err = models.LoadErrors(load_event=ev, error=error_report[1], source=error_report[0], message=error_report[2], datatype=error_report[2])
+		err.save()
+
+	if len(ret) == 0:
+		ev.status = 'indexed'
+	else:
+		ev.status = 'failed'
+	ev.save(update_fields=['status'])

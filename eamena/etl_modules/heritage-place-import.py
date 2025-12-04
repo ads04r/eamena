@@ -1,13 +1,9 @@
-from datetime import datetime
-import json
-from openpyxl import load_workbook
-import os
+import json, os
 from tempfile import NamedTemporaryFile
 
 from django.core.exceptions import ValidationError
-import uuid
 from django.db import connection
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest
 from django.utils.translation import gettext as _
 from django.core.files.storage import default_storage
 from django.contrib.auth.models import User
@@ -15,13 +11,11 @@ from arches.app.datatypes.datatypes import DataTypeFactory
 from arches.app.etl_modules.decorators import load_data_async
 from arches.app.models.models import Node, TileModel, ETLModule
 from arches.app.models.system_settings import settings
-from arches.app.utils.betterJSONSerializer import JSONSerializer
 from arches.app.etl_modules.base_import_module import (
     BaseImportModule,
     FileValidationError,
 )
-import arches.app.tasks as tasks
-from arches.management.commands.etl_template import create_tile_excel_workbook
+from eamena.tasks import load_etl_file
 
 details = {
     "etlmoduleid": "9b48b02b-0a45-4b4c-96d3-9e780ea3d2ff",
@@ -89,41 +83,27 @@ class HeritagePlaceImporter(BaseImportModule):
     def preview(self, request):
         pass
 
-    def write(self, request):
-        # This function is called first
+    @load_data_async
+    def run_load_task_async(self, request):
+        self.loadid = request.POST.get("load_id")
         self.temp_dir = os.path.join(settings.UPLOADED_FILES_DIR, "tmp", self.loadid)
         self.file_details = request.POST.get("load_details", None)
-        multiprocessing = request.POST.get("multiprocessing", False)
         result = {}
         if self.file_details:
             details = json.loads(self.file_details)
             files = details["result"]["summary"]["files"]
             summary = details["result"]["summary"]
-            use_celery_file_size_threshold = self.config.get(
-                "celeryByteSizeLimit", 100000
+
+        load_task = load_etl_file.apply_async(
+            (self.userid, files, summary, result, self.temp_dir, self.loadid),
+        )
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """UPDATE load_event SET taskid = %s WHERE loadid = %s""",
+                (load_task.task_id, self.loadid),
             )
 
-            if (
-                self.mode != "cli"
-                and summary["cumulative_files_size"] > use_celery_file_size_threshold
-            ):
-                response = self.run_load_task_async(request, self.loadid)
-            else:
-                response = self.run_load_task(
-                    self.userid,
-                    files,
-                    summary,
-                    result,
-                    self.temp_dir,
-                    self.loadid,
-                    multiprocessing,
-                )
-
-            return response
-
-    @load_data_async
-    def run_load_task_async(self, request):
-        pass
-
     def run_load_task(self, userid, loadid, module_id, graph_id, node_id, operation, language_code, pattern, new_text, resourceids):
-        pass
+        raise NotImplementedError
+
+    
