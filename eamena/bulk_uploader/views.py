@@ -10,7 +10,7 @@ from arches.app.models.models import GraphModel
 from eamena.tasks import import_processed_bulk_upload_and_notify
 from django.views.decorators.csrf import csrf_exempt
 
-import os, sys, json, uuid, datetime
+import os, sys, json, uuid, datetime, logging
 import arches.app.utils.task_management as task_management
 
 def __user_canbulkupload(user):

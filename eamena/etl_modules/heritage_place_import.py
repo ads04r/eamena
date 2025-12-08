@@ -15,7 +15,7 @@ from arches.app.etl_modules.base_import_module import (
     BaseImportModule,
     FileValidationError,
 )
-from eamena.tasks import load_etl_file
+import eamena.tasks as tasks
 
 details = {
     "etlmoduleid": "9b48b02b-0a45-4b4c-96d3-9e780ea3d2ff",
@@ -24,7 +24,7 @@ details = {
     "etl_type": "import",
     "component": "views/components/etl_modules/heritage-place-import",
     "componentname": "heritage-place-import",
-    "modulename": "heritage-place-import.py",
+    "modulename": "heritage_place_import.py",
     "classname": "HeritagePlaceImporter",
     "config": {"bgColor": "#42485a", "circleColor": "#7f7f7f"},
     "icon": "fa fa-institution",
@@ -68,23 +68,8 @@ class HeritagePlaceImporter(BaseImportModule):
             ETLModule.objects.get(pk=self.moduleid).config if self.moduleid else {}
         )
 
-    def validate(self, request):
-        pass
-
-    def validate_inputs(self, request):
-        pass
-
-    def edit_staged_data(self, cursor, graph_id, node_id, operation, language_code, pattern, new_text):
-        pass
-
-    def get_preview_data(self, node_id, search_url, language_code, operation, old_text, case_insensitive, whole_word):
-        pass
-
-    def preview(self, request):
-        pass
-
-    @load_data_async
-    def run_load_task_async(self, request):
+    def run_load_task(self, userid, files, summary, result, temp_dir, loadid, multiprocessing=False):
+        
         self.loadid = request.POST.get("load_id")
         self.temp_dir = os.path.join(settings.UPLOADED_FILES_DIR, "tmp", self.loadid)
         self.file_details = request.POST.get("load_details", None)
@@ -94,7 +79,7 @@ class HeritagePlaceImporter(BaseImportModule):
             files = details["result"]["summary"]["files"]
             summary = details["result"]["summary"]
 
-        load_task = load_etl_file.apply_async(
+        load_task = tasks.load_etl_file.apply_async(
             (self.userid, files, summary, result, self.temp_dir, self.loadid),
         )
         with connection.cursor() as cursor:
@@ -103,7 +88,6 @@ class HeritagePlaceImporter(BaseImportModule):
                 (load_task.task_id, self.loadid),
             )
 
-    def run_load_task(self, userid, loadid, module_id, graph_id, node_id, operation, language_code, pattern, new_text, resourceids):
-        raise NotImplementedError
+    def validate_uploaded_file(self, workbook):
+        pass # We accept all XLSX files at this point.
 
-    

@@ -76,24 +76,63 @@ def import_processed_bulk_upload_and_notify(notify_address=None, upload_path=Non
 		msg.attach_alternative(html_content, "text/html")
 		msg.send()
 
-@shared_task
-def load_etl_file(userid, files, summary, result, temp_dir, loadid):
+def load_hp_data(import_module, importer_name, userid, files, summary, result, temp_dir, loadid):
+
+	logger = logging.getLogger(__name__)
+	try:
+		import_module.run_load_task(userid, files, summary, result, temp_dir, loadid)
+
+		load_event = models.LoadEvent.objects.get(loadid=loadid)
+		status = _("Completed") if load_event.status == "indexed" else _("Failed")
+	except Exception as e:
+		logger.error(e, exc_info=True)
+		load_event = models.LoadEvent.objects.get(loadid=loadid)
+		load_event.status = "failed"
+		load_event.save()
+		status = _("Failed")
+	finally:
+		msg = _("{}: {} [{}]").format(importer_name, summary["name"], status)
+		user = User.objects.get(id=userid)
+		notify_completion(msg, user)
+
+def old_load_hp_data(userid, files, summary, result, temp_dir, loadid):
 
 	ev = models.LoadEvent.objects.get(loadid=loadid)
 	out = StringIO()
 	import_file = os.path.join(temp_dir, list(files.keys())[0])
+	if not os.path.exists(import_file):
+		import_file = os.path.join(settings.MEDIA_ROOT, temp_dir, list(files.keys())[0])
 	graph_id = '34cfe98e-c2c0-11ea-9026-02e7594ce0a0'
 	call_command('bu', operation='validate', graph=graph_id, source=import_file, stdout=out)
 	ret = json.loads(out.getvalue())
 
-	print(ret) # Could not open the file: uploadedfiles/tmp/10ef8e33-4ca7-404a-b3f1-07cee6a42923/BUS_Qatar_E51N25-43_Upload.xlsx
-
 	for error_report in ret:
-		err = models.LoadErrors(load_event=ev, error=error_report[1], source=error_report[0], message=error_report[2], datatype=error_report[2])
+		err = models.LoadErrors(load_event=ev, error=error_report[1], source=error_report[0], message=error_report[2], datatype=error_report[2], type='tile', nodegroupid=None)
 		err.save()
 
 	if len(ret) == 0:
 		ev.status = 'indexed'
+		ev.successful = True
 	else:
 		ev.status = 'failed'
-	ev.save(update_fields=['status'])
+		ev.successful = False
+	ev.complete = True
+	ev.save(update_fields=['status', 'successful', 'complete'])
+
+@shared_task
+def load_tile_excel(userid, files, summary, result, temp_dir, loadid):
+    from eamena.etl_modules import heritage_place_import
+
+    importer = heritage_place_import.HeritagePlaceImporter(
+        request=None, loadid=loadid, temp_dir=temp_dir
+    )
+    load_hp_data(
+        importer,
+        "Heritage Place Bulk Upload Import",
+        userid,
+        files,
+        summary,
+        result,
+        temp_dir,
+        loadid,
+    )
