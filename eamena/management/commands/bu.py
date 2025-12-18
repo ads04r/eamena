@@ -121,91 +121,24 @@ class Command(BaseCommand):
 			self.__error("", "No operation selected. Use --operation")
 
 		if options['operation'] == 'convert':
-
-			try:
-				rm = GraphModel.objects.get(graphid=options['graph'])
-			except GraphModel.DoesNotExist:
-				rm = None
-
-			if rm is None:
-				self.__error("", "Invalid or missing graph UUID. Use --graph")
-				model_name = ''
-			else:
-				model_name = str(rm.name)
-
-			if model_name == 'Heritage Place':
-
-				translated_data = self.__translate_heritage_place(options)
-				if self.__check_translated_data(translated_data):
-					resources = self.__convert_translated_data(translated_data, options)
-					mapped_resources = self.__map_resources(resources, options)
-					business_data = {"resources": mapped_resources}
-					data = {"business_data": business_data}
-
-			if model_name == 'Grid Square':
-
-				translated_data = self.__translate_grid_square(options)
-				resources = self.__convert_translated_grid_square(translated_data, options)
-				business_data = {"resources": resources}
-				data = {"business_data": business_data}
+			
+			data = convert(options['graph'], options['source'], options['bus_language'], options['warn_mode'], (options['append_mode'] == 'append'))
 
 		if options['operation'] == 'validate':
 
-			translated_data = self.__translate_heritage_place(options)
-			if self.__check_translated_data(translated_data):
-				resources = self.__convert_translated_data(translated_data, options)
-				mapped_resources = self.__map_resources(resources, options)
-				business_data = {"resources": mapped_resources}
-
-				if (len(self.warnings) + len(self.errors)) == 0:
-					if len(business_data['resources']) == 0:
-						self.__warn('', 'No valid data found', 'The validator has been through the file provided and cannot find any valid data.')
-
-			if warn_mode != 'ignore':
-
-				self.errors = self.errors + self.warnings
-				self.warnings = []
-
-			convert = lambda text: int(text) if text.isdigit() else text.lower()
-			natsort_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key[0]) ]
-			data = self.errors
-			data.sort(key=natsort_key)
-			self.errors = []
+			data = validate(options['graph'], options['source'], options['bus_language'], options['warn_mode'], (options['append_mode'] == 'append'))
 
 		if options['operation'] == 'prerequisites':
 
-			translated_data = self.__translate_heritage_place(options)
-			resources = self.__convert_translated_data(translated_data, options)
-			prerequisites = self.__get_prerequisites(resources, options)
-			business_data = {"resources": prerequisites}
-			data = {"business_data": business_data}
+			data = prerequisites(options['graph'], options['source'], options['bus_language'], options['warn_mode'], (options['append_mode'] == 'append'))
 
 		if options['operation'] == 'unflatten':
 
-			data = unflatten(options['graph'], options['source'], options['bu_language'], options['warn_mode'], (options['append_mode'] == 'append'))
+			data = unflatten(options['graph'], options['source'], options['bus_language'], options['warn_mode'], (options['append_mode'] == 'append'))
 
 		if options['operation'] == 'translate':
 
-			try:
-				rm = GraphModel.objects.get(graphid=options['graph'])
-			except GraphModel.DoesNotExist:
-				rm = None
-
-			if rm is None:
-				self.__error("", "Invalid or missing graph UUID. Use --graph")
-				model_name = ''
-			else:
-				model_name = str(rm.name)
-
-			if model_name == 'Heritage Place':
-				data = self.__translate_heritage_place(options)
-
-			if model_name == 'Grid Square':
-				data = self.__translate_grid_square(options)
-
-			for i in range(0, len(data)):
-				if '_' in (data[i]):
-					del(data[i]['_'])
+			data = translate(options['graph'], options['source'], options['bus_language'], options['warn_mode'], (options['append_mode'] == 'append'))
 
 		if options['operation'] == 'list_nodes':
 

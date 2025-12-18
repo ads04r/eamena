@@ -22,6 +22,8 @@ class BulkUploader():
 
 		self.idcache = {}
 		self.graphcache = {}
+		self.errors = []
+		self.warnings = []
 
 	def create_res(self, graphid, legacy_id=''):
 
@@ -885,31 +887,94 @@ def list_nodes(graphid, language='en', warnings='warn'):
 	bu = BulkUploader()
 	return bu.list_nodes(options)
 
-def convert():
+def convert(graphid, source_file, language='en', warnings='warn', append=False):
 	"""Converts an XLSX bulk upload sheet into Arches JSON."""
-	return []
+	rm = GraphModel.objects.get(graphid=graphid)
+	model_name = str(rm.name)
+	options = {'graph': graphid, 'source': source_file, 'bus_language': language, 'warn_mode': warnings, 'append_mode': 'new'}
+	if append:
+		options['append_mode'] = 'append'
+	bu = BulkUploader()
+	if model_name == 'Heritage Place':
+		translated_data = bu.translate_heritage_place(options)
+		if bu.check_translated_data(translated_data):
+			resources = bu.convert_translated_data(translated_data, options)
+			mapped_resources = bu.map_resources(resources, options)
+			business_data = {"resources": mapped_resources}
+			data = {"business_data": business_data}
+	if model_name == 'Grid Square':
+		translated_data = bu.translate_grid_square(options)
+		resources = bu.convert_translated_grid_square(translated_data, options)
+		business_data = {"resources": resources}
+		data = {"business_data": business_data}
+	if len(bu.errors) > 0:
+		return []
+	return data
 
-def translate():
-    return []
+def translate(graphid, source_file, language='en', warnings='warn', append=False):
+	"""Like unflatten, but uses Arches to validate
+	and translates all terms into their correct UUIDs"""
+	rm = GraphModel.objects.get(graphid=graphid)
+	model_name = str(rm.name)
+	options = {'graph': graphid, 'source': source_file, 'bus_language': language, 'warn_mode': warnings, 'append_mode': 'new'}
+	if append:
+		options['append_mode'] = 'append'
+	bu = BulkUploader()
+	if model_name == 'Heritage Place':
+		data = bu.translate_heritage_place(options)
+	if model_name == 'Grid Square':
+		data = bu.translate_grid_square(options)
+	for i in range(0, len(data)):
+		if '_' in (data[i]):
+			del(data[i]['_'])
+	return data
 
-def validate():
-    """Inspects an XLSX bulk upload sheet and lists errors."""
-    return []
+def validate(graphid, source_file, language='en', warnings='warn', append=False):
+	"""Inspects an XLSX bulk upload sheet and lists errors."""
+	translated_data = translate(graphid, source_file, language, warnings, append)
+	options = {'graph': graphid, 'source': source_file, 'bus_language': language, 'warn_mode': warnings, 'append_mode': 'new'}
+	if append:
+		options['append_mode'] = 'append'
+	bu = BulkUploader()
+	if bu.check_translated_data(translated_data):
+		resources = bu.convert_translated_data(translated_data, options)
+		mapped_resources = bu.map_resources(resources, options)
+		business_data = {"resources": mapped_resources}
+		if (len(bu.warnings) + len(bu.errors)) == 0:
+			if len(business_data['resources']) == 0:
+				bu.warn('', 'No valid data found', 'The validator has been through the file provided and cannot find any valid data.')
+	if warnings != 'ignore':
+		bu.errors = bu.errors + bu.warnings
+		bu.warnings = []
+	convert = lambda text: int(text) if text.isdigit() else text.lower()
+	natsort_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key[0]) ]
+	data = bu.errors
+	data.sort(key=natsort_key)
+	return data
 
 def unflatten(graphid, source_file, language='en', warnings='warn', append=False):
 	"""Dumps the intermediate data format, in the correct structure
 	but without validating concepts."""
-	options = {'graph': graphid, 'source': source_file, 'bus_language': language, 'warn_mode': warnings, 'append': 'new'}
+	options = {'graph': graphid, 'source': source_file, 'bus_language': language, 'warn_mode': warnings, 'append_mode': 'new'}
 	if append:
-		options['append'] = 'append'
+		options['append_mode'] = 'append'
 	bu = BulkUploader()
 	return bu.unflatten(options)
 
-def prerequisites():
-    """Returns an Arches JSON file containing all the prerequisite
-    objects (grid ids, etc) that do not already exist in the
-    database."""
-    return []
+def prerequisites(graphid, source_file, language='en', warnings='warn', append=False):
+	"""Returns an Arches JSON file containing all the prerequisite
+	objects (grid ids, etc) that do not already exist in the
+	database."""
+	translated_data = translate(graphid, source_file, language, warnings, append)
+	options = {'graph': graphid, 'source': source_file, 'bus_language': language, 'warn_mode': warnings, 'append_mode': 'new'}
+	if append:
+		options['append_mode'] = 'append'
+	bu = BulkUploader()
+	resources = bu.convert_translated_data(translated_data, options)
+	prerequisites = bu.get_prerequisites(resources, options)
+	business_data = {"resources": prerequisites}
+	data = {"business_data": business_data}
+	return []
 
 def annotate():
     """Takes an Arches import file and outputs the same file but
