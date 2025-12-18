@@ -242,19 +242,6 @@ class BulkUploader():
 			return self.graphcache[graphid]
 		return None
 
-	def eamenaid_from_resourceinstance(self, resourceinstanceid):
-
-		eamena_tile_uuid = '34cfe992-c2c0-11ea-9026-02e7594ce0a0'
-
-		try:
-			tile = TileModel.objects.get(nodegroup__nodegroupid=eamena_tile_uuid, resourceinstance_id=str(resourceinstanceid))
-		except:
-			return ''
-		data = tile.data
-		if eamena_tile_uuid in data:
-			return data[eamena_tile_uuid]
-		return ''
-
 	def resourceinstance_from_eamenaid(self, eamenaid, graphid, quick=False):
 
 		key = str(graphid) + '_' + str(eamenaid)
@@ -881,6 +868,28 @@ def parse_date(datestring):
 			return None
 	return None
 
+def eamenaid_from_resourceinstance(resourceinstanceid, lang='en'):
+
+	eamena_tile_uuid = '34cfe992-c2c0-11ea-9026-02e7594ce0a0'
+
+	try:
+		tile = TileModel.objects.get(nodegroup__nodegroupid=eamena_tile_uuid, resourceinstance_id=str(resourceinstanceid))
+	except:
+		return ''
+	data = tile.data
+	if not eamena_tile_uuid in data:
+		return ''
+	
+	ret = data[eamena_tile_uuid]
+	if isinstance(ret, str):
+		return ret
+	if isinstance(ret, dict):
+		if lang in ret:
+			if 'value' in ret[lang]:
+				return ret[lang]['value']
+	return ''
+
+
 def list_nodes(graphid, language='en', warnings='warn'):
 	"""List all the valid nodes in a graph."""
 	options = {'graph': graphid, 'bus_language': language, 'warn_mode': warnings}
@@ -976,23 +985,115 @@ def prerequisites(graphid, source_file, language='en', warnings='warn', append=F
 	data = {"business_data": business_data}
 	return []
 
-def annotate():
-    """Takes an Arches import file and outputs the same file but
-    with extra properties (which are ignored by Arches)
-    describing the field names and concepts, making the file
-    much easier for a human to read."""
-    return []
+def annotate(graphid, source_file, language='en', warnings='warn'):
+	"""Takes an Arches import file and outputs the same file but
+	with extra properties (which are ignored by Arches)
+	describing the field names and concepts, making the file
+	much easier for a human to read."""
+	fp = open(source_file, 'r')
+	data = json.loads('\n'.join(fp.readlines()))
+	fp.close()
+	nodes = list_nodes(graphid, language, warnings)	
+	for r in range(0, len(data['business_data']['resources'])):
+		for t in range(0, len(data['business_data']['resources'][r]['tiles'])):
+			tileid = data['business_data']['resources'][r]['tiles'][t]['tileid']
+			nodegroup_id = data['business_data']['resources'][r]['tiles'][t]['nodegroup_id']
+			resourceinstance_id = data['business_data']['resources'][r]['tiles'][t]['resourceinstance_id']
+			nodegroup_id_comment = ''
+			resourceinstance_id_comment = ''
+			data_fields = []
+			for node in nodes:
+				if node['nodeid'] == nodegroup_id:
+					nodegroup_id_comment = node['name']
+				if node['nodeid'] == resourceinstance_id:
+					resourceinstance_id_comment = node['name']
+				for ko in data['business_data']['resources'][r]['tiles'][t]['data'].keys():
+					key = str(ko)
+					if node['nodeid'] == key:
+						data_fields.append(node['name'])
+			if len(nodegroup_id_comment) > 0:
+				data['business_data']['resources'][r]['tiles'][t]['nodegroup_name'] = nodegroup_id_comment
+			if len(resourceinstance_id_comment) > 0:
+				data['business_data']['resources'][r]['tiles'][t]['resourceinstance_name'] = resourceinstance_id_comment
+			if len(data_fields) > 0:
+				data['business_data']['resources'][r]['tiles'][t]['data_fields'] = data_fields
+	return data
 
-def summary():
-    """Returns a list of UUIDs of imported items, and
-    their EAMENA IDs."""
-    return []
+def summary(fn, language='en'):
+	"""Returns a list of UUIDs of imported items, and
+	their EAMENA IDs."""
+	fp = open(fn, 'r')
+	data = json.loads('\n'.join(fp.readlines()))
+	fp.close()
+	if not('business_data' in data):
+		return []
+	if not('resources' in data['business_data']):
+		return []
+	ret = []
+	for item in data['business_data']['resources']:
+		if not('resourceinstance' in item):
+			continue
+		if not('resourceinstanceid' in item['resourceinstance']):
+			continue
+		id = str(item['resourceinstance']['resourceinstanceid'])
+		eid = eamenaid_from_resourceinstance(id)
+		if len(eid) == 0:
+			continue
+		ret.append({"uuid": id, "eamenaid": eid})
 
-def undo():
-    """Takes a generated Arches JSON business data file as an input,
-    and deletes all UUIDs referenced within, effectively undoing a
-    bulk upload."""
-    return []
+	return ret
+
+def undo(fn):
+	"""Takes a generated Arches JSON business data file as an input,
+	and deletes all UUIDs referenced within, effectively undoing a
+	bulk upload."""
+	fp = open(fn, 'r')
+	data = json.loads('\n'.join(fp.readlines()))
+	fp.close()
+	if not('business_data' in data):
+		return [0, 0, 0]
+	if not('resources' in data['business_data']):
+		return [0, 0, 0]
+	uuids = []
+	for item in data['business_data']['resources']:
+		if not('resourceinstance' in item):
+			continue
+		if not('resourceinstanceid' in item['resourceinstance']):
+			continue
+		id = str(item['resourceinstance']['resourceinstanceid'])
+		uuids.append(id)
+	if len(uuids) > 0:
+		sys.stderr.write("Attempting to delete " + str(len(uuids)) + " resources.\n")
+	attempts = 0
+	processed = 0
+	deleted_res = 0
+	deleted_tiles = 0
+	deleted_indices = 0
+	es = Elasticsearch(hosts=settings.ELASTICSEARCH_HOSTS)
+	for id in uuids:
+		try:
+			ri = ResourceInstance.objects.get(resourceinstanceid=id)
+		except (ValidationError, ObjectDoesNotExist):
+			ri = None
+		if ri is None:
+			continue
+		attempts = attempts + 1
+		deleted_items, delete_report = ri.delete()
+		if deleted_items > 0:
+			processed = processed + 1
+			deleted_res = deleted_res + delete_report['models.ResourceInstance']
+			deleted_tiles = deleted_tiles + delete_report['models.TileModel']
+			try:
+				index_report = es.delete(index='eamena_resources', id=id)
+			except:
+				index_report = {'result': 'exception'}
+			if 'result' in index_report:
+				if index_report['result'] == 'deleted':
+					deleted_indices = deleted_indices + 1
+	if len(uuids) > 0:
+		sys.stderr.write("Resources for Removal: " + str(attempts) + ", Resources Deleted: " + str(deleted_res) + ", Tiles Deleted: " + str(deleted_tiles) + ", Indices deleted: " + str(deleted_indices) + "\n")
+		sys.stderr.write("Resources not found: " + str(len(uuids) - processed) + "\n")
+	return [processed, deleted_res, deleted_tiles]
 
 #  -w {warn,ignore,strict}, --warnings {warn,ignore,strict}
 #                        Warn mode; 'warn'=Write warnings to STDERR, but ultimately ignore them. 'ignore'=Silently ignore warnings altogether.

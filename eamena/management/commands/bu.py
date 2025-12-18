@@ -113,161 +113,37 @@ class Command(BaseCommand):
 				self.__error("", "Output path is not a directory: " + options['dest_dir'])
 
 		if options['warn_mode'] != '':
-
 			warn_mode = options['warn_mode']
 
 		if options['operation'] == '':
-
 			self.__error("", "No operation selected. Use --operation")
 
 		if options['operation'] == 'convert':
-			
 			data = convert(options['graph'], options['source'], options['bus_language'], options['warn_mode'], (options['append_mode'] == 'append'))
 
 		if options['operation'] == 'validate':
-
 			data = validate(options['graph'], options['source'], options['bus_language'], options['warn_mode'], (options['append_mode'] == 'append'))
 
 		if options['operation'] == 'prerequisites':
-
 			data = prerequisites(options['graph'], options['source'], options['bus_language'], options['warn_mode'], (options['append_mode'] == 'append'))
 
 		if options['operation'] == 'unflatten':
-
 			data = unflatten(options['graph'], options['source'], options['bus_language'], options['warn_mode'], (options['append_mode'] == 'append'))
 
 		if options['operation'] == 'translate':
-
 			data = translate(options['graph'], options['source'], options['bus_language'], options['warn_mode'], (options['append_mode'] == 'append'))
 
 		if options['operation'] == 'list_nodes':
-
 			data = list_nodes(options['graph'], options['bu_language'], options['warn_mode'])
 
 		if options['operation'] == 'annotate':
-
-			fn = options['source']
-			fp = open(fn, 'r')
-			data = json.loads('\n'.join(fp.readlines()))
-			fp.close()
-			nodes = self.__list_nodes(options)
-
-			for r in range(0, len(data['business_data']['resources'])):
-				for t in range(0, len(data['business_data']['resources'][r]['tiles'])):
-
-					tileid = data['business_data']['resources'][r]['tiles'][t]['tileid']
-					nodegroup_id = data['business_data']['resources'][r]['tiles'][t]['nodegroup_id']
-					resourceinstance_id = data['business_data']['resources'][r]['tiles'][t]['resourceinstance_id']
-
-					nodegroup_id_comment = ''
-					resourceinstance_id_comment = ''
-					data_fields = []
-					for node in nodes:
-						if node['nodeid'] == nodegroup_id:
-							nodegroup_id_comment = node['name']
-						if node['nodeid'] == resourceinstance_id:
-							resourceinstance_id_comment = node['name']
-						for ko in data['business_data']['resources'][r]['tiles'][t]['data'].keys():
-							key = str(ko)
-							if node['nodeid'] == key:
-								data_fields.append(node['name'])
-
-					if len(nodegroup_id_comment) > 0:
-						data['business_data']['resources'][r]['tiles'][t]['nodegroup_name'] = nodegroup_id_comment
-					if len(resourceinstance_id_comment) > 0:
-						data['business_data']['resources'][r]['tiles'][t]['resourceinstance_name'] = resourceinstance_id_comment
-					if len(data_fields) > 0:
-						data['business_data']['resources'][r]['tiles'][t]['data_fields'] = data_fields
+			data = annotate(options['graph'], options['source'], options['bus_language'], options['warn_mode'])
 
 		if options['operation'] == 'summary':
-
-			fn = options['source']
-			fp = open(fn, 'r')
-			data = json.loads('\n'.join(fp.readlines()))
-			fp.close()
-
-			if not('business_data' in data):
-				self.__error('', "Not a valid business data file.", str(fn))
-			else:
-				if not('resources' in data['business_data']):
-					self.__error('', "Not a valid business data file.", str(fn))
-
-			ret = []
-			if len(self.errors) == 0:
-
-				for item in data['business_data']['resources']:
-					if not('resourceinstance' in item):
-						continue
-					if not('resourceinstanceid' in item['resourceinstance']):
-						continue
-					id = str(item['resourceinstance']['resourceinstanceid'])
-					eid = self.__eamenaid_from_resourceinstance(id)
-					if len(eid) == 0:
-						continue
-					ret.append({"uuid": id, "eamenaid": eid})
-
-			data = ret
+			data = summary(options['source'], options['bus_language'])
 
 		if options['operation'] == 'undo':
-
-			fn = options['source']
-			fp = open(fn, 'r')
-			data = json.loads('\n'.join(fp.readlines()))
-			fp.close()
-
-			if not('business_data' in data):
-				self.__error('', "Not a valid business data file.", str(fn))
-			else:
-				if not('resources' in data['business_data']):
-					self.__error('', "Not a valid business data file.", str(fn))
-
-			uuids = []
-			if len(self.errors) == 0:
-
-				for item in data['business_data']['resources']:
-					if not('resourceinstance' in item):
-						continue
-					if not('resourceinstanceid' in item['resourceinstance']):
-						continue
-					id = str(item['resourceinstance']['resourceinstanceid'])
-					uuids.append(id)
-
-			if len(uuids) > 0:
-				sys.stderr.write("Attempting to delete " + str(len(uuids)) + " resources.\n")
-
-			attempts = 0
-			processed = 0
-			deleted_res = 0
-			deleted_tiles = 0
-			deleted_indices = 0
-
-			es = Elasticsearch(hosts=settings.ELASTICSEARCH_HOSTS)
-			for id in uuids:
-				try:
-					ri = ResourceInstance.objects.get(resourceinstanceid=id)
-				except (ValidationError, ObjectDoesNotExist):
-					ri = None
-				if ri is None:
-					continue
-				attempts = attempts + 1
-				deleted_items, delete_report = ri.delete()
-				if deleted_items > 0:
-					processed = processed + 1
-					deleted_res = deleted_res + delete_report['models.ResourceInstance']
-					deleted_tiles = deleted_tiles + delete_report['models.TileModel']
-					try:
-						index_report = es.delete(index='eamena_resources', id=id)
-					except:
-						index_report = {'result': 'exception'}
-					if 'result' in index_report:
-						if index_report['result'] == 'deleted':
-							deleted_indices = deleted_indices + 1
-
-			if len(uuids) > 0:
-				sys.stderr.write("Resources for Removal: " + str(attempts) + ", Resources Deleted: " + str(deleted_res) + ", Tiles Deleted: " + str(deleted_tiles) + ", Indices deleted: " + str(deleted_indices) + "\n")
-				sys.stderr.write("Resources not found: " + str(len(uuids) - processed) + "\n")
-
-			data = [processed, deleted_res, deleted_tiles]
+			data = undo(options['source'])
 
 		if warn_mode == 'strict':
 
