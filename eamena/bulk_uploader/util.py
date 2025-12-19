@@ -1094,29 +1094,3 @@ def undo(fn):
 		sys.stderr.write("Resources for Removal: " + str(attempts) + ", Resources Deleted: " + str(deleted_res) + ", Tiles Deleted: " + str(deleted_tiles) + ", Indices deleted: " + str(deleted_indices) + "\n")
 		sys.stderr.write("Resources not found: " + str(len(uuids) - processed) + "\n")
 	return [processed, deleted_res, deleted_tiles]
-
-#  -w {warn,ignore,strict}, --warnings {warn,ignore,strict}
-#                        Warn mode; 'warn'=Write warnings to STDERR, but ultimately ignore them. 'ignore'=Silently ignore warnings altogether.
-#                        'strict'=Treat warnings as errors, and stop if any are encountered.
-#  -l {en}, --language {en}
-#                        Language of BUS file.
-#  -a {new,append}, --append {new,append}
-#                        Append mode; 'new'=Don't append, generate new UUIDs for items 'append'=Append data to existing records, using UNIQUEID
-#                        as an identifier.
-#  -s SOURCE, --source SOURCE
-#                        BUS file for processing.
-#  -d DEST_DIR, --dest_dir DEST_DIR
-#                        Directory where you want to save exported files. Omitting this argument dumps to STDOUT.
-#  -g GRAPH, --graph GRAPH
-#                        The graphid of the resources you would like to import/convert.
-#  --version             Show program's version number and exit.
-#  -v {0,1,2,3}, --verbosity {0,1,2,3}
-#                        Verbosity level; 0=minimal output, 1=normal output, 2=verbose output, 3=very verbose output
-#  --settings SETTINGS   The Python path to a settings module, e.g. "myproject.settings.main". If this isn't provided, the DJANGO_SETTINGS_MODULE
-#                        environment variable will be used.
-#  --pythonpath PYTHONPATH
-#                        A directory to add to the Python path, e.g. "/home/djangoprojects/myproject".
-#  --traceback           Raise on CommandError exceptions.
-#  --no-color            Don't colorize the command output.
-#  --force-color         Force colorization of the command output.
-#  --skip-checks         Skip system checks.
