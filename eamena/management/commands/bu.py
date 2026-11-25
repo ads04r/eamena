@@ -8,7 +8,7 @@ from arches.app.models.concept import Concept, get_preflabel_from_valueid, get_v
 from arches.app.views import search
 from django.core.management.base import BaseCommand
 from django.contrib.gis.geos.error import GEOSException
-from eamena.bulk_uploader import HeritagePlaceBulkUploadSheet, GridSquareBulkUploadSheet, InformationResource
+from eamena.bulk_uploader import HeritagePlaceBulkUploadSheet, GridSquareBulkUploadSheet, InformationResourceBulkUploadSheet, InformationResource
 from elasticsearch import Elasticsearch
 from elasticsearch.exceptions import RequestError, NotFoundError
 from geomet import wkt
@@ -962,6 +962,12 @@ class Command(BaseCommand):
 					if ch in expected_nodes:
 						continue
 					self.__warn('', 'Unexpected column header: "' + str(ch) + '"', 'Please check you are using the correct version of the Heritage Place bulk upload template.')
+				for i in range(0, sheet.count()):
+					data.append(sheet.data(i))
+				for error in sheet.errors():
+					self.__warn(error[0], error[1], error[2])
+			elif rm.name == 'Information Resource':
+				sheet = InformationResourceBulkUploadSheet(options['source'])
 				for i in range(0, sheet.count()):
 					data.append(sheet.data(i))
 				for error in sheet.errors():

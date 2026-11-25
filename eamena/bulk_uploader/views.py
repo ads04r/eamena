@@ -109,7 +109,7 @@ def upload_spreadsheet(request):
 	}
 	if request.user.email:
 		response_data['user']['email'] = request.user.email
-	if not fname.endswith('.xlsx'):
+	if not (fname.endswith('.xlsx') or fname.endswith('.bib')):
 		response_data['filevalid'] = False
 	else:
 		fpath = handle_uploaded_file(f, upload_id, response_data)
@@ -137,6 +137,8 @@ def validate(request):
 	importfile = ''
 	for file in os.scandir(filepath):
 		if file.name.endswith('.xlsx'):
+			importfile = file
+		if file.name.endswith('.bib'):
 			importfile = file
 	fullpath = os.path.join(filepath, importfile.name)
 	errorpath = os.path.join(filepath, 'error_reports')

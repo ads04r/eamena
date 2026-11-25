@@ -1,5 +1,6 @@
 from .BulkUploadSheet import BulkUploadSheet
 from .HeritagePlaceBulkUploadSheet import HeritagePlaceBulkUploadSheet
+from .InformationResourceBulkUploadSheet import InformationResourceBulkUploadSheet
 from .GridSquareBulkUploadSheet import GridSquareBulkUploadSheet
 from .ResourceModel import ResourceModel
 from .InformationResource import InformationResource
